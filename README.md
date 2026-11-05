@@ -13,8 +13,10 @@ go build -o vnclient ./cmd/vnclient
 ## Run
 
 ```sh
-VNC_PASS=secret ./vnclient
+./vnclient -host 10.0.0.120 -user ubuntu -vnc-pass secret
 ```
+
+Flags: `-host`, `-user`, `-key`, `-vnc-port`, `-vnc-pass`, `-vnc-addr`, `-remote-dl`, `-title`. Without `-vnc-pass` the client prompts. `-vnc-addr` skips SSH and connects directly.
 
 The window shows the remote screen. The toolbar has `Enviar` (upload to the remote downloads folder) and `Baixar` (download the last file to `~/Downloads`). You can also drop files onto the window to upload them.
 

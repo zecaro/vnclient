@@ -50,22 +50,28 @@ type vncView struct {
 }
 
 func newVNCView() *vncView {
-	img := canvas.NewImageFromImage(image.NewRGBA(image.Rect(0, 0, 1280, 800)))
+	buf := image.NewRGBA(image.Rect(0, 0, 1280, 800))
+	img := canvas.NewImageFromImage(buf)
 	img.FillMode = canvas.ImageFillStretch
 	img.ScaleMode = canvas.ImageScaleFastest
-	return &vncView{img: img}
+	return &vncView{img: img, fb: buf}
 }
 
 func (v *vncView) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(v.img)
 }
 
-func (v *vncView) setFB(fb *image.RGBA) {
-	v.mu.Lock()
-	v.fb = fb
-	v.img.Image = fb
-	v.mu.Unlock()
-	v.img.Refresh()
+func (v *vncView) setFB(src *image.RGBA) {
+	fyne.DoAndWait(func() {
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		if v.fb == nil || v.fb.Rect != src.Rect {
+			v.fb = image.NewRGBA(src.Rect)
+			v.img.Image = v.fb
+		}
+		copy(v.fb.Pix, src.Pix)
+		v.img.Refresh()
+	})
 }
 
 func (v *vncView) clamp(x, y float32) (uint16, uint16) {
@@ -264,7 +270,8 @@ func runVNC(c *vnc.ClientConn, ch chan vnc.ServerMessage, view *vncView, status 
 		t := time.NewTicker(500 * time.Millisecond)
 		defer t.Stop()
 		for range t.C {
-			s := clip.Content()
+			var s string
+			fyne.DoAndWait(func() { s = clip.Content() })
 			clipMu.Lock()
 			changed := s != lastClip
 			if changed {
@@ -289,7 +296,7 @@ func runVNC(c *vnc.ClientConn, ch chan vnc.ServerMessage, view *vncView, status 
 			clipMu.Lock()
 			lastClip = msg.Text
 			clipMu.Unlock()
-			clip.SetContent(msg.Text)
+			fyne.Do(func() { clip.SetContent(msg.Text) })
 		}
 	}
 	return nil
@@ -383,12 +390,13 @@ func main() {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("/home/ubuntu/Downloads/arquivo")
 	btn := widget.NewButton("Baixar", func() {
+		name := entry.Text
 		go func() {
-			if err := download(entry.Text); err != nil {
-				dialog.ShowError(err, w)
+			if err := download(name); err != nil {
+				fyne.Do(func() { dialog.ShowError(err, w) })
 				return
 			}
-			status.SetText("baixado: " + path.Base(entry.Text))
+			fyne.Do(func() { status.SetText("baixado: " + path.Base(name)) })
 		}()
 	})
 	bottom := container.NewBorder(nil, nil, nil, btn, entry)
@@ -398,10 +406,10 @@ func main() {
 		for _, u := range uris {
 			go func(p string) {
 				if err := upload(p); err != nil {
-					dialog.ShowError(err, w)
+					fyne.Do(func() { dialog.ShowError(err, w) })
 					return
 				}
-				status.SetText("enviado: " + filepath.Base(p))
+				fyne.Do(func() { status.SetText("enviado: " + filepath.Base(p)) })
 			}(u.Path())
 		}
 	})
@@ -410,18 +418,19 @@ func main() {
 	var cMu sync.Mutex
 	var c *vnc.ClientConn
 
+	clip := a.Clipboard()
 	go func() {
 		cc, err := vncConnect(ch)
 		if err != nil {
-			status.SetText("erro: " + err.Error())
+			fyne.Do(func() { status.SetText("erro: " + err.Error()) })
 			return
 		}
 		cMu.Lock()
 		c = cc
 		cMu.Unlock()
 		defer cc.Close()
-		if err := runVNC(cc, ch, view, status, a.Clipboard()); err != nil {
-			status.SetText("erro: " + err.Error())
+		if err := runVNC(cc, ch, view, status, clip); err != nil {
+			fyne.Do(func() { status.SetText("erro: " + err.Error()) })
 		}
 	}()
 

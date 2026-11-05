@@ -7,7 +7,7 @@ Built with [Fyne](https://fyne.io) and [go-vnc](https://github.com/tenthirtyam/g
 ## Build
 
 ```sh
-go build -o vnclient .
+go build -o vnclient ./cmd/vnclient
 ```
 
 ## Run
